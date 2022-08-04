@@ -1,0 +1,19 @@
+{
+  "name": "github-discussion-notifier",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.1113.0",
+    "crypto": "^1.0.1",
+    "https": "^1.0.0",
+    "node-fetch": "^3.2.3",
+    "querystring": "^0.2.1"
+  }
+}

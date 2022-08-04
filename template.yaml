@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: github-discussion-notifier
+
+Globals:
+  Function:
+    Timeout: 3600
+
+Parameters:
+  SlackBotTokenParameterName:
+    Type: String
+    Default: /github_discussion_notifier/slack_bot_token
+  SlackChannel:
+    Type: String
+    Default: ''
+  SecretTokenForWebhookParameterName:
+    Type: String
+    Default: /github_discussion_notifier/secret_token
+
+Resources:
+  MainFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs14.x
+      Environment:
+        Variables:
+          SLACK_CHANNEL: !Ref SlackChannel
+          SLACK_BOT_TOKEN: !Ref SlackBotTokenParameterName
+          SECRET_TOKEN: !Ref SecretTokenForWebhookParameterName
+      FunctionUrlConfig:
+        AuthType: NONE
