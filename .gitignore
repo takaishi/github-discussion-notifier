@@ -3,3 +3,4 @@ yarn-error.log
 functions/*/main
 .env
 env.json
+.aws-sam

@@ -2,17 +2,13 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: github-discussion-notifier
 
-Globals:
-  Function:
-    Timeout: 3600
-
 Parameters:
   SlackBotTokenParameterName:
     Type: String
     Default: /github_discussion_notifier/slack_bot_token
-  SlackChannel:
+  SlackChannelParameterName:
     Type: String
-    Default: ''
+    Default: /github_discussion_notifier/slack_channel
   SecretTokenForWebhookParameterName:
     Type: String
     Default: /github_discussion_notifier/secret_token
@@ -25,8 +21,29 @@ Resources:
       Runtime: nodejs14.x
       Environment:
         Variables:
-          SLACK_CHANNEL: !Ref SlackChannel
-          SLACK_BOT_TOKEN: !Ref SlackBotTokenParameterName
-          SECRET_TOKEN: !Ref SecretTokenForWebhookParameterName
+          SLACK_BOT_TOKEN_PARAMETER_NAME: !Ref SlackBotTokenParameterName
+          SECRET_TOKEN_PARAMETER_NAME: !Ref SecretTokenForWebhookParameterName
+          SLACK_CHANNEL_PARAMETER_NAME: !Ref SlackChannelParameterName
       FunctionUrlConfig:
         AuthType: NONE
+      Policies:
+        - Statement:
+            - Sid: SSMDescribeParametersPolicy
+              Effect: Allow
+              Action:
+                - ssm:DescribeParameters
+              Resource: !Join
+                - ':'
+                - - 'arn:aws:ssm:ap-northeast-1'
+                  - !Ref AWS::AccountId
+                  - 'parameter/github_discussion_notifier/*'
+            - Sid: SSMGetParameterPolicy
+              Effect: Allow
+              Action:
+                - ssm:GetParameters
+                - ssm:GetParameter
+              Resource: !Join
+                - ':'
+                - - 'arn:aws:ssm:ap-northeast-1'
+                  - !Ref AWS::AccountId
+                  - 'parameter/github_discussion_notifier/*'
