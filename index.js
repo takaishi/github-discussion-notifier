@@ -1,7 +1,20 @@
-const https = require('https');
 const crypto = require('crypto');
 const AWS = require('aws-sdk');
+const fetch = require("node-fetch");
 const ssmClient = new AWS.SSM({apiVersion: '2014-11-06', region: 'ap-northeast-1'})
+
+async function slackChannel() {
+    if (process.env.SLACK_CHANNEL) {
+        return process.env.SLACK_CHANNEL
+    } else {
+        params = {
+            Name: process.env.SLACK_CHANNEL_PARAMETER_NAME,
+            WithDecryption: false
+        }
+        const data = await ssmClient.getParameter(params).promise()
+        return data.Parameter.Value
+    }
+}
 
 const SLACK_CHANNEL = process.env.SLACK_CHANNEL
 
@@ -10,8 +23,8 @@ async function slackBotToken() {
         return process.env.SLACK_BOT_TOKEN
     } else {
         params = {
-            Name: process.env.PARAMETER_STORE_SLACK_BOT_TOKEN,
-            WithDecryption: true
+            Name: process.env.SLACK_BOT_TOKEN_PARAMETER_NAME,
+            WithDecryption: false
         }
         const data = await ssmClient.getParameter(params).promise()
         return data.Parameter.Value
@@ -23,8 +36,8 @@ async function secretToken() {
         return process.env.SECRET_TOKEN
     } else {
         params = {
-            Name: process.env.PARAMETER_STORE_SECRET_TOKEN,
-            WithDecryption: true
+            Name: process.env.SECRET_TOKEN_PARAMETER_NAME,
+            WithDecryption: false
         }
         const data = await ssmClient.getParameter(params).promise()
         return data.Parameter.Value
@@ -41,22 +54,16 @@ function getEventPayload(event) {
     }
 }
 
-function payloadForDiscussionCreated(eventPayload) {
+
+async function payloadForDiscussionCreated(eventPayload) {
+    const channel = await slackChannel();
     const discussionOwner = `<${eventPayload.discussion.user.html_url}|${eventPayload.discussion.user.login}>`
     return {
-        channel: SLACK_CHANNEL,
-        blocks: [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": `New discussion created by ${discussionOwner}`
-                }
-            }
-        ],
+        channel: channel,
         attachments: [
             {
                 "color": "#008000",
+                "pretext": `New discussion created by ${discussionOwner}`,
                 "title": `#${eventPayload.discussion.number} ${eventPayload.discussion.title}`,
                 "title_link": eventPayload.discussion.html_url,
                 "text": eventPayload.discussion.body,
@@ -72,25 +79,18 @@ function payloadForDiscussionCreated(eventPayload) {
     }
 }
 
-function payloadForCommentCreated(eventPayload) {
+async function payloadForCommentCreated(eventPayload) {
+    const channel = await slackChannel();
     const discussionOwner = `<${eventPayload.discussion.user.html_url}|${eventPayload.discussion.user.login}'s>`
     const commentOwner = `<${eventPayload.comment.user.html_url}|${eventPayload.comment.user.login}>`
 
     return {
-        channel: SLACK_CHANNEL,
+        channel: channel,
         mrkdwn: true,
-        blocks: [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": `Comment by ${commentOwner} on ${discussionOwner} discussion`
-                }
-            },
-        ],
         attachments: [
             {
                 "color": "#000000",
+                "pretext": `New discussion created by ${discussionOwner}`,
                 "title": `Comment on #${eventPayload.discussion.number} ${eventPayload.discussion.title}`,
                 "title_link": eventPayload.discussion.html_url,
                 "text": eventPayload.comment.body,
@@ -99,18 +99,18 @@ function payloadForCommentCreated(eventPayload) {
     }
 }
 
-function postPayload(eventPayload) {
+async function postPayload(eventPayload) {
     if (!!eventPayload.comment) {
-        return postPayloadForComment(eventPayload)
+        return await postPayloadForComment(eventPayload)
     } else {
-        return postPayloadForDiscussion(eventPayload)
+        return await postPayloadForDiscussion(eventPayload)
     }
 }
 
-function postPayloadForComment(eventPayload) {
+async function postPayloadForComment(eventPayload) {
     switch (eventPayload.action) {
         case "created":
-            return payloadForCommentCreated(eventPayload)
+            return await payloadForCommentCreated(eventPayload)
         case "edited":
         case "deleted":
         default:
@@ -118,10 +118,10 @@ function postPayloadForComment(eventPayload) {
     }
 }
 
-function postPayloadForDiscussion(eventPayload) {
+async function postPayloadForDiscussion(eventPayload) {
     switch (eventPayload.action) {
         case "created":
-            return payloadForDiscussionCreated(eventPayload)
+            return await payloadForDiscussionCreated(eventPayload)
         case "edited":
         case "deleted":
         case "pinned":
@@ -149,48 +149,34 @@ async function verifySignature(event) {
     return signature === headers['x-hub-signature-256']
 }
 
-function postMessage(payload, token) {
+async function postMessage(payload, token) {
     const options = {
-        hostname: "slack.com",
-        port: 443,
-        path: "/api/chat.postMessage",
-        method: "POST",
+        method: 'POST',
+        body: JSON.stringify(payload),
         headers: {
             "Content-Type": "application/json; charset=utf-8",
             "Authorization": `Bearer ${token}`,
-        },
-        maxAttempts: 5,
-        retryDelay: 5000,
-    };
 
-    const req = https.request(options, (res) => {
-        console.log(`statusCode: ${res.statusCode}`)
-        res.on("data", (d) => {
-            process.stdout.write(d)
-        })
-    })
-    req.on("error", (error) => {
-        console.error(error)
-    });
-    req.write(JSON.stringify(payload));
-    req.end();
+        }
+    }
+    await fetch('https://slack.com/api/chat.postMessage', options)
 
     return {statusCode: 200, body: 'OK'}
 }
 
-exports.handler = (event, context, callback) => {
+exports.handler = async (event, context, callback) => {
     const eventPayload = getEventPayload(event)
-    const payload = postPayload(eventPayload)
+    const payload = await postPayload(eventPayload)
+    const token = await slackBotToken()
 
     if (! verifySignature(event)) {
-        console.log("Signature is invalid")
+        console.error("Signature is invalid")
         return {statusCode: 500, body: 'Signature is invalid'}
     }
-    slackBotToken().then((data) => {
-        postMessage(payload, data)
-        callback(null)
-    }).catch((e) =>{
-        console.error(e)
-        callback(e)
-    })
+
+    try {
+        await postMessage(payload, token)
+    } catch(err) {
+        console.error(err)
+    }
 };
