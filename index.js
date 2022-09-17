@@ -3,7 +3,7 @@ const AWS = require('aws-sdk');
 const fetch = require("node-fetch");
 const ssmClient = new AWS.SSM({apiVersion: '2014-11-06', region: 'ap-northeast-1'})
 
-async function slackChannel() {
+async function slackChannel(full_name) {
     if (process.env.SLACK_CHANNEL) {
         return process.env.SLACK_CHANNEL
     } else {
@@ -12,7 +12,7 @@ async function slackChannel() {
             WithDecryption: false
         }
         const data = await ssmClient.getParameter(params).promise()
-        return data.Parameter.Value
+        return JSON.parse(data.Parameter.Value)[full_name]
     }
 }
 
@@ -56,7 +56,7 @@ function getEventPayload(event) {
 
 
 async function payloadForDiscussionCreated(eventPayload) {
-    const channel = await slackChannel();
+    const channel = await slackChannel(eventPayload.repository.full_name);
     const discussionOwner = `<${eventPayload.discussion.user.html_url}|${eventPayload.discussion.user.login}>`
     return {
         channel: channel,
@@ -80,7 +80,7 @@ async function payloadForDiscussionCreated(eventPayload) {
 }
 
 async function payloadForCommentCreated(eventPayload) {
-    const channel = await slackChannel();
+    const channel = await slackChannel(eventPayload.repository.full_name);
     const discussionOwner = `<${eventPayload.discussion.user.html_url}|${eventPayload.discussion.user.login}'s>`
     const commentOwner = `<${eventPayload.comment.user.html_url}|${eventPayload.comment.user.login}>`
 
