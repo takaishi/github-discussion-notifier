@@ -90,7 +90,7 @@ async function payloadForCommentCreated(eventPayload) {
         attachments: [
             {
                 "color": "#000000",
-                "pretext": `New discussion created by ${discussionOwner}`,
+                "pretext": `New comment created by ${discussionOwner}`,
                 "title": `Comment on #${eventPayload.discussion.number} ${eventPayload.discussion.title}`,
                 "title_link": eventPayload.discussion.html_url,
                 "text": eventPayload.comment.body,
